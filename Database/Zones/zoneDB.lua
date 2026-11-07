@@ -258,30 +258,20 @@ do
         local _HasRequiredRace = QuestiePlayer.HasRequiredRace
         local _HasRequiredClass = QuestiePlayer.HasRequiredClass
         local _QueryQuestSingle = QuestieDB.QueryQuestSingle
+        local specialSorts = {}
+        for _, sortId in pairs(QuestieDB.sortKeys) do
+            specialSorts[sortId] = true
+        end
 
         for questId in pairs(QuestieDB.QuestPointers) do
             if (not hiddenQuests[questId]) or hiddenQuests[questId] == HIDE_ON_MAP or QuestieEvent.IsEventQuest(questId) then
                 if _HasRequiredRace(_QueryQuestSingle(questId, "requiredRaces")) and _HasRequiredClass(_QueryQuestSingle(questId, "requiredClasses")) then
                     local zoneOrSort = _QueryQuestSingle(questId, "zoneOrSort")
+                    local group
                     if zoneOrSort > 0 then
-                        local parentZoneId = ZoneDB:GetParentZoneId(zoneOrSort)
-
-                        if parentZoneId then
-                            if (not zoneMap[parentZoneId]) then
-                                zoneMap[parentZoneId] = {}
-                            end
-                            zoneMap[parentZoneId][questId] = true
-                        else
-                            if (not zoneMap[zoneOrSort]) then
-                                zoneMap[zoneOrSort] = {}
-                            end
-                            zoneMap[zoneOrSort][questId] = true
-                        end
-                    elseif _ZoneDB.IsSpecialQuest(zoneOrSort) then
-                        if (not zoneMap[zoneOrSort]) then
-                            zoneMap[zoneOrSort] = {}
-                        end
-                        zoneMap[zoneOrSort][questId] = true
+                        group = ZoneDB:GetParentZoneId(zoneOrSort) or zoneOrSort
+                    elseif specialSorts[zoneOrSort] then
+                        group = zoneOrSort
                     else
                         -- This branch is kind of expensive so yield more often if it happens a lot
                         local startedBy = _QueryQuestSingle(questId, "startedBy")
@@ -304,6 +294,14 @@ do
                             zoneMap = _ZoneDB.GetZonesWithQuestsFromObjects(zoneMap, finishedBy[2])
                         end
                         if yield then count = count + extraYield end
+                    end
+                    if group then
+                        local quests = zoneMap[group]
+                        if not quests then
+                            quests = {}
+                            zoneMap[group] = quests
+                        end
+                        quests[questId] = true
                     end
                 end
             end
@@ -342,16 +340,6 @@ do
     end
 end
 
-
----@param zoneOrSort ZoneOrSort
-function _ZoneDB.IsSpecialQuest(zoneOrSort)
-    for _, v in pairs(QuestieDB.sortKeys) do
-        if zoneOrSort == v then
-            return true
-        end
-    end
-    return false
-end
 
 ---@param zones any @ I have no idea what this is does or looks
 ---@param npcIds NpcId[]

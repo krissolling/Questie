@@ -15,7 +15,7 @@ local playerClass = UnitClassBase("player")
 local playerFaction = UnitFactionGroup("player")
 
 local tinsert = table.insert
-local sub, bitband, strlen = string.sub, bit.band, string.len
+local sub, bitband = string.sub, bit.band
 
 local professionKeys = QuestieProfessions.professionKeys
 
@@ -52,17 +52,38 @@ end
 
 ---Uses a table to fetch multiple townfolk types at the same time.
 ---@param folkTypes table<string, {mask: NpcFlags|integer, requireSubname: boolean, data: NpcId[]}>
-local function _PopulateTownsfolkTypes(folkTypes) -- populate the table with all npc ids based on the given bitmask
+local function _PopulateTownsfolkTypes(folkTypes)
+    -- Many NPCs share flag values, so resolve each value to categories once per scan.
+    local matchesByFlags = {}
     local count = 0
     for id in pairs(QuestieDB.NPCPointers) do
         local flags = QuestieDB.QueryNPCSingle(id, "npcFlags")
-        for name, folkType in pairs(folkTypes) do
-            if flags and folkType.mask and bitband(flags, folkType.mask) == folkType.mask then
+        if flags then
+            local matches = matchesByFlags[flags]
+            if not matches then
+                matches = {}
+                for _, folkType in pairs(folkTypes) do
+                    local mask = folkType.mask
+                    if mask and bitband(flags, mask) == mask then
+                        matches[#matches + 1] = folkType
+                    end
+                end
+                matchesByFlags[flags] = matches
+            end
+            if #matches > 0 then
                 local npcName = QuestieDB.QueryNPCSingle(id, "name")
-                local subName = QuestieDB.QueryNPCSingle(id, "subName")
                 if npcName and sub(npcName, 1, 5) ~= "[DND]" then
-                    if (not folkType.requireSubname) or (subName and strlen(subName) > 1) then
-                        folkType.data[#folkType.data+1] = id
+                    local hasSubname
+                    for i = 1, #matches do
+                        local folkType = matches[i]
+                        if folkType.requireSubname and hasSubname == nil then
+                            local subName = QuestieDB.QueryNPCSingle(id, "subName")
+                            hasSubname = subName and #subName > 1 or false
+                        end
+                        if not folkType.requireSubname or hasSubname then
+                            local ids = folkType.data
+                            ids[#ids + 1] = id
+                        end
                     end
                 end
             end
@@ -73,9 +94,29 @@ local function _PopulateTownsfolkTypes(folkTypes) -- populate the table with all
         end
         count = count + 1
     end
-    return folkTypes
 end
 
+local function _BuildPetFoodVendorTypes()
+    local categories = {"Meat", "Fish", "Cheese", "Bread", "Fungus", "Fruit", "Raw Meat", "Raw Fish"}
+    local foods = {}
+    for _, category in ipairs(categories) do
+        foods[category] = {}
+    end
+
+    local count = 0
+    for id in pairs(QuestieDB.ItemPointers) do
+        local category = categories[QuestieDB.QueryItemSingle(id, "foodType")]
+        if category then
+            tinsert(foods[category], id)
+        end
+        count = count + 1
+        if count == 301 then
+            count = 0
+            coroutine.yield()
+        end
+    end
+    return foods
+end
 
 function Townsfolk.Initialize()
 
@@ -251,24 +292,8 @@ function Townsfolk.Initialize()
     factionSpecificTownsfolk["Horde"]["Mailbox"] = hordeMailBoxes
     factionSpecificTownsfolk["Alliance"]["Mailbox"] = allianceMailBoxes
 
-    local petFoodVendorTypes = {["Meat"] = {},["Fish"]={},["Cheese"]={},["Bread"]={},["Fungus"]={},["Fruit"]={},["Raw Meat"]={},["Raw Fish"]={}}
-    local petFoodIndexes = {"Meat","Fish","Cheese","Bread","Fungus","Fruit","Raw Meat","Raw Fish"}
-
-    local count = 0
-    for id in pairs(QuestieDB.ItemPointers) do
-        -- Number fields read 0 for Items without a food type; only food types 1-8 name a pet food category.
-        local petFoodCategory = petFoodIndexes[QuestieDB.QueryItemSingle(id, "foodType")]
-        if petFoodCategory then
-            tinsert(petFoodVendorTypes[petFoodCategory], id)
-        end
-        if count > 300 then -- Yield every 300 iterations, 300 is just a madeup number, is pretty fast.
-            count = 0
-            coroutine.yield()
-        end
-        count = count + 1
-    end
-
-    coroutine.yield()
+    -- Only the hunter vendor menu consumes this index. The scan decodes every Item row.
+    local petFoodVendorTypes = playerClass == "HUNTER" and _BuildPetFoodVendorTypes() or {}
 
     Townsfolk.townsfolk = townfolk
     Townsfolk.professionTrainers = professionTrainers

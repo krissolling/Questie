@@ -149,6 +149,23 @@ describe("Townsfolk", function()
             assert.is_nil(townsfolk["Barber"])
         end)
 
+        it("shares category matches without sharing a sub-name decision across NPCs", function()
+            local flags = NPC_FLAGS.BANKER + NPC_FLAGS.BATTLEMASTER + NPC_FLAGS.REPAIR
+            mock.SetBaseRow("Npc", 9001, {[npcKeys.name] = "Titled NPC", [npcKeys.subName] = "Banker", [npcKeys.npcFlags] = flags})
+            mock.SetBaseRow("Npc", 9002, {[npcKeys.name] = "Untitled NPC", [npcKeys.npcFlags] = flags})
+            _BindComposedReads()
+            QuestieDB.QueryNPCSingle = spy.new(QuestieDB.QueryNPCSingle)
+            _RunInitialize()
+
+            local townsfolk = Townsfolk.townsfolk
+            assert.are_same({9001}, townsfolk["Battlemaster"])
+            local repairs = townsfolk["Repair"]
+            table.sort(repairs)
+            assert.are_same({1001, 9001, 9002}, repairs)
+            assert.spy(QuestieDB.QueryNPCSingle).was.called_with(9001, "subName")
+            assert.spy(QuestieDB.QueryNPCSingle).was.called_with(9002, "subName")
+        end)
+
         it("should collect profession trainers and weapon masters by ID independent of their localized sub-name", function()
             _RunInitialize()
 
@@ -183,7 +200,19 @@ describe("Townsfolk", function()
             assert.are_same({6001}, factionSpecific.Alliance["Mailbox"])
         end)
 
-        it("groups pet food Items by food type", function()
+        it("skips the Item scan for non-hunters", function()
+            QuestieDB.QueryItemSingle = spy.new(QuestieDB.QueryItemSingle)
+            _RunInitialize()
+
+            assert.spy(QuestieDB.QueryItemSingle).was.not_called()
+            assert.are_same({}, Townsfolk.petFoodVendorTypes)
+        end)
+
+        it("groups pet food Items by food type for hunters", function()
+            local originalUnitClassBase = _G.UnitClassBase
+            _G.UnitClassBase = function() return "HUNTER" end
+            dofile("Modules/QuestieMenu/Townsfolk.lua")
+            _G.UnitClassBase = originalUnitClassBase
             _RunInitialize()
 
             local petFood = Townsfolk.petFoodVendorTypes

@@ -56,114 +56,6 @@ QuestieJourney.availableFactionExpansions = QuestieJourney.availableFactionExpan
 QuestieJourney.availableFactionExpansionOrder = QuestieJourney.availableFactionExpansionOrder or {}
 QuestieJourney.factionsByExpansion = QuestieJourney.factionsByExpansion or {}
 
-local _EnsureFactionQuestData
-
-local referencedFactionFields = {
-    "requiredMinRep",
-    "requiredMaxRep",
-    "reputationReward",
-    "requiredRaces",
-    "requiredClasses",
-}
-
-local referencedFactionIds
-local factionDataInitialized = false
-
-local function _RegisterFactionForExpansion(factionId, introOrder)
-    local factionName = QuestieReputation.GetFactionName(factionId)
-    if not factionName or factionName == "" then
-        return
-    end
-
-    local expansionKey = expansionKeyByOrder[introOrder]
-    if not expansionKey then
-        return
-    end
-
-    local bucket = QuestieJourney.factionsByExpansion[expansionKey]
-    if not bucket then
-        bucket = {}
-        QuestieJourney.factionsByExpansion[expansionKey] = bucket
-    end
-
-    if not bucket[factionId] then
-        bucket[factionId] = factionName
-    end
-end
-
-local function _EnsureFactionRegistered(factionId)
-    if not factionId then
-        return
-    end
-
-    if not factionIntroductionOrder[factionId] then
-        factionIntroductionOrder[factionId] = Expansions.MoP
-    end
-
-    _RegisterFactionForExpansion(factionId, factionIntroductionOrder[factionId])
-end
-
-local function _IsQuestAvailableToPlayer(requiredRaces, requiredClasses)
-    return QuestiePlayer.HasRequiredRace(requiredRaces) and QuestiePlayer.HasRequiredClass(requiredClasses)
-end
-
-local function _CollectReferencedFactionIds()
-    if referencedFactionIds then
-        return referencedFactionIds
-    end
-
-    if not QuestieDB.QuestPointers then
-        return {}
-    end
-
-    local refs = {}
-    local yieldCounter = 0
-
-    for questId in pairs(QuestieDB.QuestPointers) do
-        yieldCounter = yieldCounter + 1
-        if yieldCounter >= 1000 then
-            yieldCounter = 0
-            coroutine.yield()
-        end
-        local result = QuestieDB.QueryQuest(questId, referencedFactionFields)
-        if result then
-            local requiredMinRep = result[1]
-            local requiredMaxRep = result[2]
-            local reputationReward = result[3]
-            local requiredRaces = result[4]
-            local requiredClasses = result[5]
-
-            if _IsQuestAvailableToPlayer(requiredRaces, requiredClasses) then
-                if requiredMinRep then
-                    local factionId = requiredMinRep[1]
-                    if factionId then
-                        refs[factionId] = true
-                    end
-                end
-
-                if requiredMaxRep then
-                    local factionId = requiredMaxRep[1]
-                    if factionId then
-                        refs[factionId] = true
-                    end
-                end
-
-                if reputationReward then
-                    for _, reward in pairs(reputationReward) do
-                        local factionId = reward[1]
-                        if factionId then
-                            refs[factionId] = true
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    referencedFactionIds = refs
-    return referencedFactionIds
-end
-
 local function _BuildExpansionDropdownData()
     wipe(QuestieJourney.availableFactionExpansions)
     wipe(QuestieJourney.availableFactionExpansionOrder)
@@ -176,83 +68,46 @@ local function _BuildExpansionDropdownData()
     end
 end
 
-local function _PopulateFactionsByExpansion()
-    local referenced = _CollectReferencedFactionIds()
-
-    QuestieJourney.factionsByExpansion = QuestieJourney.factionsByExpansion or {}
-
-    for key in pairs(QuestieJourney.factionsByExpansion) do
-        QuestieJourney.factionsByExpansion[key] = nil
-    end
-
+local function _BuildFactionsByExpansion(factionQuestMap)
+    local byExpansion = {}
     for _, expansion in ipairs(expansionDefinitions) do
-        QuestieJourney.factionsByExpansion[expansion.key] = {}
+        byExpansion[expansion.key] = {}
     end
 
-    for factionId, introOrder in pairs(factionIntroductionOrder) do
-        if referenced[factionId] then
-            _RegisterFactionForExpansion(factionId, introOrder)
+    -- The quest index already identifies every faction that has visible quests.
+    for factionId in pairs(factionQuestMap) do
+        local expansionKey = expansionKeyByOrder[factionIntroductionOrder[factionId] or Expansions.MoP]
+        local name = QuestieReputation.GetFactionName(factionId)
+        if expansionKey and name and name ~= "" then
+            byExpansion[expansionKey][factionId] = name
         end
     end
-
-    for factionId in pairs(referenced) do
-        if not factionIntroductionOrder[factionId] then
-            _EnsureFactionRegistered(factionId)
-        end
-    end
-end
-
-local function _EnsureFactionDataInitialized()
-    if factionDataInitialized then
-        return
-    end
-
-    _BuildExpansionDropdownData()
-    _PopulateFactionsByExpansion()
-
-    factionDataInitialized = true
-end
-
-function _QuestieJourney.questsByFaction:InitializeFactionData()
-    _EnsureFactionDataInitialized()
-end
-
-function _QuestieJourney.questsByFaction:InitializeFactionQuestData()
-    _EnsureFactionQuestData()
+    return byExpansion
 end
 
 local function _AddQuestToFaction(factionQuestMap, factionId, questId)
-    if not factionId or not questId then
+    if not factionId then
         return
     end
 
-    _EnsureFactionRegistered(factionId)
-
-    if not factionQuestMap[factionId] then
-        factionQuestMap[factionId] = {}
+    local quests = factionQuestMap[factionId]
+    if not quests then
+        quests = {}
+        factionQuestMap[factionId] = quests
     end
-
-    factionQuestMap[factionId][questId] = true
+    quests[questId] = true
 end
 
-function _EnsureFactionQuestData()
+function _QuestieJourney.questsByFaction:InitializeFactionData()
     if QuestieJourney.factionMap then
         return
     end
 
     local factionQuestMap = {}
-
-    local HIDE_ON_MAP = QuestieQuestBlacklist.HIDE_ON_MAP
+    local hideOnMap = QuestieQuestBlacklist.HIDE_ON_MAP
     local hiddenQuests = QuestieCorrections.hiddenQuests
-
-    local queryFields = {
-        "requiredMinRep",
-        "requiredMaxRep",
-        "reputationReward",
-        "requiredRaces",
-        "requiredClasses",
-    }
-
+    local query = QuestieDB.QueryQuestSingle
+    local hasRequiredRace, hasRequiredClass = QuestiePlayer.HasRequiredRace, QuestiePlayer.HasRequiredClass
     local yieldCounter = 0
     for questId in pairs(QuestieDB.QuestPointers) do
         yieldCounter = yieldCounter + 1
@@ -260,47 +115,34 @@ function _EnsureFactionQuestData()
             yieldCounter = 0
             coroutine.yield()
         end
-        local queryResult = QuestieDB.QueryQuest(questId, queryFields) or {}
-        local requiredMinRep = queryResult[1]
-        local requiredMaxRep = queryResult[2]
-        local reputationReward = queryResult[3]
-        local requiredRaces = queryResult[4]
-        local requiredClasses = queryResult[5]
 
-        if _IsQuestAvailableToPlayer(requiredRaces, requiredClasses) then
-            -- Filter out hidden quests
-            if hiddenQuests and (((not hiddenQuests[questId]) or hiddenQuests[questId] == HIDE_ON_MAP) or QuestieEvent.IsEventQuest(questId)) then
-                if requiredMinRep then
-                    _AddQuestToFaction(factionQuestMap, requiredMinRep[1], questId)
-                end
-
-                if requiredMaxRep then
-                    _AddQuestToFaction(factionQuestMap, requiredMaxRep[1], questId)
-                end
-
-                if reputationReward then
-                    for _, factionPair in pairs(reputationReward) do
-                        _AddQuestToFaction(factionQuestMap, factionPair[1], questId)
-                    end
+        local hidden = hiddenQuests and hiddenQuests[questId]
+        -- Reputation fields can be decoded into fresh tables. Only request them for eligible quests.
+        if hiddenQuests and (not hidden or hidden == hideOnMap or QuestieEvent.IsEventQuest(questId))
+            and hasRequiredRace(query(questId, "requiredRaces"))
+            and hasRequiredClass(query(questId, "requiredClasses")) then
+            local requiredMinRep = query(questId, "requiredMinRep")
+            local requiredMaxRep = query(questId, "requiredMaxRep")
+            local reputationReward = query(questId, "reputationReward")
+            if requiredMinRep then
+                _AddQuestToFaction(factionQuestMap, requiredMinRep[1], questId)
+            end
+            if requiredMaxRep then
+                _AddQuestToFaction(factionQuestMap, requiredMaxRep[1], questId)
+            end
+            if reputationReward then
+                for _, reward in pairs(reputationReward) do
+                    _AddQuestToFaction(factionQuestMap, reward[1], questId)
                 end
             end
         end
     end
 
-    if QuestieJourney.factionsByExpansion then
-        for expansionKey, bucket in pairs(QuestieJourney.factionsByExpansion) do
-            if bucket then
-                for factionId in pairs(bucket) do
-                    local questsForFaction = factionQuestMap[factionId]
-                    if (not questsForFaction) or (not next(questsForFaction)) then
-                        bucket[factionId] = nil
-                    end
-                end
-            end
-        end
-    end
+    QuestieJourney.factionsByExpansion = _BuildFactionsByExpansion(factionQuestMap)
+    _BuildExpansionDropdownData()
     QuestieJourney.factionMap = factionQuestMap
 end
+
 
 ---Manage the faction tree itself and the contents of the per-quest window
 ---@param container AceSimpleGroup

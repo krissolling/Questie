@@ -163,6 +163,17 @@ describe("ZoneDB", function()
             }, ZoneDB.GetZonesWithQuests())
         end)
 
+        it("only groups a previously unknown sort once it is registered", function()
+            local sortId = -999999
+            quests[100].zoneOrSort = sortId
+            assert.is_nil(ZoneDB.GetZonesWithQuests()[sortId])
+
+            QuestieDB.sortKeys.TEST_SORT = sortId
+            local grouped = ZoneDB.GetZonesWithQuests()
+            QuestieDB.sortKeys.TEST_SORT = nil
+            assert.are_same({[100] = true}, grouped[sortId])
+        end)
+
         it("merges redirected quests and builds dropdowns from the same map without changing quest data", function()
             local overrides = {[-676] = 141}
             local zoneMap = ZoneDB.GetZonesWithQuests(false, overrides)

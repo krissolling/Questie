@@ -66,7 +66,6 @@ function _QuestieJourney:HandleTabChange(container, group)
         local tab = _QuestieJourney.questsByFaction
         _DrawBrowseTab(container, group, tab, QuestieJourney.factionMap, function()
             tab:InitializeFactionData()
-            tab:InitializeFactionQuestData()
         end)
     elseif group == "search" then
         QuestieSearchResults:DrawSearchTab(container)

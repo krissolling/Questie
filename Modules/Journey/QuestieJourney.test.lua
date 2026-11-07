@@ -32,8 +32,7 @@ describe("QuestieJourney startup and browsing", function()
             journey.zoneMap = {}
         end)
         faction = {
-            InitializeFactionData = spy.new(function() end),
-            InitializeFactionQuestData = spy.new(function() journey.factionMap = {} end),
+            InitializeFactionData = spy.new(function() journey.factionMap = {} end),
             DrawTab = spy.new(function() end),
         }
         private.questsByFaction = faction
@@ -83,7 +82,6 @@ describe("QuestieJourney startup and browsing", function()
 
         assert.are_equal(1, #jobs)
         assert.spy(faction.InitializeFactionData).was.called(1)
-        assert.spy(faction.InitializeFactionQuestData).was.called(1)
         assert.spy(faction.DrawTab).was.called(2)
     end)
 
