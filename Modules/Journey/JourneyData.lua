@@ -7,7 +7,7 @@ local ZoneDB = QuestieLoader:ImportModule("ZoneDB")
 local QuestieDB = QuestieLoader:ImportModule("QuestieDB")
 
 ---Build Journey's quest groups and matching dropdown choices after the database and ZoneDB are initialized.
----QuestieJourney:Initialize stores both results in self.zoneMap and self.zones. Tabs should read those tables,
+---QuestieJourney stores both results on the first visit to the zone tab. Tabs should read those tables,
 ---not call Build again: every call scans the quest database; this module does not cache results.
 ---Treat the returned tables as read-only. The quest map is also ZoneDB's latest generated map, not a copy.
 ---@param yield boolean? @True requires a coroutine managed by ThreadLib; false/nil builds synchronously.

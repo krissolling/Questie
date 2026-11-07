@@ -34,7 +34,6 @@ local l10n = QuestieLoader:ImportModule("l10n")
 local AceGUI = LibStub("AceGUI-3.0")
 
 local factionTreeFrame
-local factionQuestMap
 
 local expansionDefinitions = {
     { key = "classic", label = EXPANSION_NAME0, order = Expansions.Era },
@@ -222,7 +221,7 @@ function _QuestieJourney.questsByFaction:InitializeFactionQuestData()
     _EnsureFactionQuestData()
 end
 
-local function _AddQuestToFaction(factionId, questId)
+local function _AddQuestToFaction(factionQuestMap, factionId, questId)
     if not factionId or not questId then
         return
     end
@@ -237,11 +236,11 @@ local function _AddQuestToFaction(factionId, questId)
 end
 
 function _EnsureFactionQuestData()
-    if factionQuestMap then
+    if QuestieJourney.factionMap then
         return
     end
 
-    factionQuestMap = {}
+    local factionQuestMap = {}
 
     local HIDE_ON_MAP = QuestieQuestBlacklist.HIDE_ON_MAP
     local hiddenQuests = QuestieCorrections.hiddenQuests
@@ -272,23 +271,21 @@ function _EnsureFactionQuestData()
             -- Filter out hidden quests
             if hiddenQuests and (((not hiddenQuests[questId]) or hiddenQuests[questId] == HIDE_ON_MAP) or QuestieEvent.IsEventQuest(questId)) then
                 if requiredMinRep then
-                    _AddQuestToFaction(requiredMinRep[1], questId)
+                    _AddQuestToFaction(factionQuestMap, requiredMinRep[1], questId)
                 end
 
                 if requiredMaxRep then
-                    _AddQuestToFaction(requiredMaxRep[1], questId)
+                    _AddQuestToFaction(factionQuestMap, requiredMaxRep[1], questId)
                 end
 
                 if reputationReward then
                     for _, factionPair in pairs(reputationReward) do
-                        _AddQuestToFaction(factionPair[1], questId)
+                        _AddQuestToFaction(factionQuestMap, factionPair[1], questId)
                     end
                 end
             end
         end
     end
-
-    QuestieJourney.factionMap = factionQuestMap
 
     if QuestieJourney.factionsByExpansion then
         for expansionKey, bucket in pairs(QuestieJourney.factionsByExpansion) do
@@ -302,6 +299,7 @@ function _EnsureFactionQuestData()
             end
         end
     end
+    QuestieJourney.factionMap = factionQuestMap
 end
 
 ---Manage the faction tree itself and the contents of the per-quest window

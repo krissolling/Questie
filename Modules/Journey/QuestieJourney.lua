@@ -77,6 +77,12 @@ local function checkForCharacterRecreation()
 end
 
 function QuestieJourney:Initialize()
+    checkForCharacterRecreation()
+    self:BuildMainFrame()
+    self:SetupKeybinding()
+end
+
+function _QuestieJourney.BuildZoneData()
     local continents = {}
     for id, name in pairs(l10n.continentLookup) do
         if not (questCategoryKeys.OUTLAND == id and Expansions.Current < Expansions.Tbc) and
@@ -91,32 +97,10 @@ function QuestieJourney:Initialize()
             continents[id] = l10n(name)
         end
     end
-    coroutine.yield()
     continents[questCategoryKeys.CLASS] = QuestiePlayer:GetLocalizedClassName()
 
-    checkForCharacterRecreation()
-
-    coroutine.yield()
-    self.continents = continents
-    -- Generate once here; tabs reuse these quest groups and dropdown choices instead of rescanning the database.
-    self.zoneMap, self.zones = JourneyData.Build(true)
-    coroutine.yield()
-
-    -- Pre-initialize faction data used by the "Quests by Faction" tab so it is ready on first open.
-    if _QuestieJourney.questsByFaction then
-        if _QuestieJourney.questsByFaction.InitializeFactionData then
-            _QuestieJourney.questsByFaction:InitializeFactionData()
-        end
-        if _QuestieJourney.questsByFaction.InitializeFactionQuestData then
-            _QuestieJourney.questsByFaction:InitializeFactionQuestData()
-        end
-    end
-
-    coroutine.yield()
-    self:BuildMainFrame()
-
-    -- Set up default keybinding for Journey window
-    self:SetupKeybinding()
+    QuestieJourney.zoneMap, QuestieJourney.zones = JourneyData.Build(true)
+    QuestieJourney.continents = continents
 end
 
 function QuestieJourney:BuildMainFrame()

@@ -6,42 +6,70 @@ local _QuestieJourney = QuestieJourney.private
 -------------------------
 ---@type QuestieSearchResults
 local QuestieSearchResults = QuestieLoader:ImportModule("QuestieSearchResults")
----@type l10n
-local l10n = QuestieLoader:ImportModule("l10n")
 ---@type ThreadLib
 local ThreadLib = QuestieLoader:ImportModule("ThreadLib")
+---@type l10n
+local l10n = QuestieLoader:ImportModule("l10n")
+
+local AceGUI = LibStub("AceGUI-3.0")
+local loadingTabs = {}
 
 _QuestieJourney.containerCache = nil
 _QuestieJourney.treeCache = nil
 
+local function _DrawBrowseTab(container, group, tab, data, build)
+    if data then
+        tab:DrawTab(container)
+        return
+    end
 
+    local label = AceGUI:Create("Label")
+    label:SetText(l10n("Please wait a moment for Questie to finish loading"))
+    label:SetFullWidth(true)
+    container:AddChild(label)
+
+    if loadingTabs[group] then
+        return
+    end
+    loadingTabs[group] = true
+
+    ThreadLib.Thread(function()
+        build()
+        loadingTabs[group] = nil
+        if _QuestieJourney.lastOpenWindow == group and QuestieJourney:IsShown() then
+            container:ReleaseChildren()
+            tab:DrawTab(container)
+        end
+    end, 0, "Error loading Journey tab " .. group, nil, function()
+        loadingTabs[group] = nil
+        if _QuestieJourney.lastOpenWindow == group then
+            container:ReleaseChildren()
+        end
+    end, "QuestieJourney.LoadTab." .. group)
+end
 
 function _QuestieJourney:HandleTabChange(container, group)
     if not _QuestieJourney.containerCache then
         _QuestieJourney.containerCache = container
     end
 
+    _QuestieJourney.lastOpenWindow = group
     container:ReleaseChildren()
 
     if group == "journey" then
         local treeGroup = _QuestieJourney.myJourney:DrawTab(container)
         _QuestieJourney.myJourney:ManageTree(treeGroup)
-        _QuestieJourney.lastOpenWindow = "journey"
         return treeGroup
     elseif group == "zone" then
-        _QuestieJourney.questsByZone:DrawTab(container)
-        _QuestieJourney.lastOpenWindow = "zone"
-        return nil
+        _DrawBrowseTab(container, group, _QuestieJourney.questsByZone, QuestieJourney.zoneMap, _QuestieJourney.BuildZoneData)
     elseif group == "faction" then
-        ThreadLib.ThreadInstant(function()
-            _QuestieJourney.questsByFaction:DrawTab(container)
+        local tab = _QuestieJourney.questsByFaction
+        _DrawBrowseTab(container, group, tab, QuestieJourney.factionMap, function()
+            tab:InitializeFactionData()
+            tab:InitializeFactionQuestData()
         end)
-        _QuestieJourney.lastOpenWindow = "faction"
-        return nil
     elseif group == "search" then
         QuestieSearchResults:DrawSearchTab(container)
-        _QuestieJourney.lastOpenWindow = "search"
-        return nil
     end
 end
 
